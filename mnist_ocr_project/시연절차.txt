@@ -1,0 +1,52 @@
+==========================================================
+ 시연 당일 절차 (한 번에 실행)
+==========================================================
+
+[준비 — 시연 전 1회]
+1. ★★★ 보드 성능 최대화 (가장 중요! 안 하면 첫 이미지 1697ms -> 하면 195ms) ★★★
+   sudo nvpmodel -m 0 && sudo jetson_clocks
+   (GPU 절전상태로 시작하면 첫 추론이 8배 이상 느려짐. 시연 직전 반드시 실행)
+   ※ run_demo.sh 안에도 자동 실행되도록 넣어두었음(sudo 권한 있을 때).
+
+2. mnistCUDNN 빌드 (소스 수정했으므로 최초 1회)
+   cd ~/Desktop/mnist_ocr_project/mnistCUDNN
+   make clean && make
+
+3. 워밍업 (YOLO 모델 로딩 미리)
+   python3 detect_yolo.py test.mp4
+
+----------------------------------------------------------
+
+[시연 — 채점 영상을 받으면]
+
+■ 방식 1) 우리 run_demo.sh 로 "한 번에" (검출+분류+채점 전부)
+   1. run_demo.sh 상단 answers=() 에 정답을 등장 순서대로 입력
+      예) answers=(6 6 6 6 1 5 6 8 6 3 8 6)
+   2. 한 줄로 실행:
+      cd ~/Desktop/mnist_ocr_project/mnistCUDNN
+      ./run_demo.sh <받은영상>
+   -> 영상검출 + PGM저장 + image=분류 + 정답비교 + 정확도/추론시간 출력까지 한 번에
+
+■ 방식 2) 채점자가 자기 shell 로 채점하는 경우
+   1. PGM 만 한 번에 긁어서 저장:
+      cd ~/Desktop/mnist_ocr_project/mnistCUDNN
+      python3 detect_yolo.py <받은영상>
+      -> 영상 전체를 한 번에 훑어 pgm_output/ 에 PGM 일괄 저장
+   2. ls pgm_output/*.pgm | wc -l  로 개수 확인 (★ 영상 속 숫자 개수와 일치?)
+   3. 채점자 shell(run_pgm_all.sh 등) 실행 — pgm_output/ 을 image= 모드로 평가
+      (각 이미지마다 Result of classification / Inference time 출력을 파싱)
+
+----------------------------------------------------------
+
+[개수가 안 맞을 때 — 디바운싱 조정]
+detect_yolo.py 상단 COOLDOWN_SEC 수정 후 다시 실행:
+   많이 저장(한 숫자가 쪼개짐): sed -i 's/COOLDOWN_SEC = 1.5/COOLDOWN_SEC = 2.0/' detect_yolo.py
+   적게 저장(두 숫자가 합쳐짐): sed -i 's/COOLDOWN_SEC = 1.5/COOLDOWN_SEC = 1.0/' detect_yolo.py
+
+==========================================================
+ mnistCUDNN image= 모드 출력 (채점 shell 호환)
+==========================================================
+   Result of classification: 6      <- 분류 결과 (awk $4)
+   Inference time: 0.123 ms         <- 순수 추론 시간 (awk $3)
+   * 측정 구간: 변수 초기화 직후 ~ cudaDeviceSynchronize() 직후
+==========================================================
